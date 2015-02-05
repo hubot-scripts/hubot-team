@@ -18,200 +18,123 @@
 #   hubot (<team_name>) team count - list the current size of the team
 #   hubot (<team_name>) team (list|show) - list the people in the team
 #   hubot (<team_name>) team (empty|clear) - clear team list
+#   hubot upgrade teams-  upgrade team for the new structure
 #
 # Author:
 #   mihai
-
 config =
-  admin_list: process.env.HUBOT_TEAM_ADMIN,
-  default_team_label: '__default__'
+  adminList: process.env.HUBOT_TEAM_ADMIN,
+
+TeamManager = require "./team_manager"
+ResponseMessage = require "./helpers/response_message"
 
 module.exports = (robot) ->
-  robot.brain.data.teams ||= {}
+  robot.brain.data.teams or= {}
+  robot.brain.data.playerStats or= []
+  teamManager = new TeamManager(robot)
+  responseMessage = new ResponseMessage(teamManager)
 
-  unless config.admin_list?
+  unless config.adminList?
     robot.logger.warning 'The HUBOT_TEAM_ADMIN environment variable not set'
 
-  if config.admin_list?
-    admins = config.admin_list.split ','
+  if config.adminList?
+    admins = config.adminList.split ','
   else
     admins = []
-
-  teamSize = (team_name, msg) ->
-    return false unless teamExists(team_name, msg)
-    robot.brain.data.teams[team_name].length
-
-  teamLabel = (team_name) ->
-    label = team_name unless team_name is config.default_team_label
-    message = if label then "`#{label}` team" else "team"
-    return message
-
-  addUserToTeam = (user, team_name, msg) ->
-    if not team_name
-      robot.brain.data['teams'][config.default_team_label] ||= []
-      team_name = config.default_team_label
-    else
-      return unless teamExists(team_name, msg)
-
-    if user in robot.brain.data.teams[team_name]
-      msg.send "#{user} already in the #{teamLabel(team_name)}"
-    else
-      count = teamSize(team_name, msg)
-      if count > 0
-        countMessage = ", " + count
-        countMessage += " others are in" if count > 1
-        countMessage += " other is in" if count == 1
-
-      robot.brain.data.teams[team_name].push(user)
-
-      message = "#{user} added to the #{teamLabel(team_name)}"
-      message += countMessage if countMessage
-      msg.send message
-
-  addTeam = (team_name, msg) ->
-    if robot.brain.data.teams[team_name]
-      msg.send "#{teamLabel(team_name)} already exists"
-    else
-      robot.brain.data['teams'][team_name] = []
-      msg.send "#{teamLabel(team_name)} created, add some people to it"
-
-  removeUserFromTeam = (user, team_name, msg) ->
-    team_name = config.default_team_label unless team_name
-    return unless teamExists(team_name, msg)
-
-    if user not in robot.brain.data.teams[team_name]
-      msg.send "#{user} already out of the #{teamLabel(team_name)}"
-    else
-      user_index = robot.brain.data.teams[team_name].indexOf(user)
-      robot.brain.data.teams[team_name].splice(user_index, 1)
-      count = teamSize(team_name, msg)
-      countMessage = ", " + count + " remaining" if count > 0
-      message = "#{user} removed from the #{teamLabel(team_name)}"
-      message += countMessage if countMessage
-      msg.send message
-
-  teamExists = (team_name, msg) ->
-    return true if team_name is config.default_team_label
-
-    if robot.brain.data.teams[team_name]
-      true
-    else
-      msg.send "#{teamLabel(team_name)} does not exist"
-      false
 
   ##
   ## hubot create <team_name> team - create team called <team_name>
   ##
   robot.respond /create (\S*) team ?.*/i, (msg) ->
-    team_name = msg.match[1]
-    addTeam(team_name, msg)
+    teamName = msg.match[1]
+    result= teamManager.createTeam(teamName)
+
+    msg.send responseMessage.createTeam(teamName, result)
 
   ##
   ## hubot (delete|remove) <team_name> team - delete team called <team_name>
   ##
   robot.respond /(delete|remove) (\S*) team ?.*/i, (msg) ->
-    team_name = msg.match[2]
-    return unless teamExists(team_name, msg)
+    teamName = msg.match[2]
+    name = msg.message.user.name
+    return msg.reply responseMessage.adminRequired() unless name in admins
+    result = teamManager.removeTeam(teamName)
+    msg.send responseMessage.deleteTeam(teamName, result)
 
-    if msg.message.user.name in admins
-      unless team_name is config.default_team_label
-        delete robot.brain.data.teams[team_name]
-        msg.send "Team `#{team_name}` removed"
-    else
-      msg.reply "Sorry, only admins can remove teams"
 
   ##
   ## hubot list teams - list all existing teams
   ##
   robot.respond /list teams ?.*/i, (msg) ->
-    team_count = Object.keys(robot.brain.data.teams).length
-    team_count = team_count - 1 if robot.brain.data.teams[config.default_team_label]
+    teamCount = teamManager.teamsCount()
+    teamCount = teamCount - 1 if teamManager.hasDefaultTeam()
+    teams = teamManager.teams()
 
-    if team_count > 0
-      message = "Teams:\n"
-
-      for team of robot.brain.data.teams
-        continue if team is config.default_team_label
-        size = teamSize(team)
-        if size > 0
-          message += "`#{team}` (#{size} total)\n"
-          for user in robot.brain.data.teams[team]
-            message += "- #{user}\n"
-          message += "\n"
-        else
-          message += "`#{team}` (empty)\n"
-
-    else
-      message = "No team was created so far"
-
-    msg.send message
+    msg.send responseMessage.listTeams(teamCount, teams)
 
   ##
   ## hubot <team_name> team add (me|<user>) - add me or <user> to team
   ##
-  robot.respond /(\S*)? team add (\S*) ?.*/i, (msg) ->
-    team_name = msg.match[1]
-    user = msg.match[2]
-    if user.toLocaleLowerCase() == "me"
-      user = msg.message.user.name
-    addUserToTeam(user, team_name, msg)
+  robot.respond /(\S*)? team add @?(\S*) ?.*/i, (msg) ->
+    teamName = msg.match[1]
+    user = responseMessage.normalizeUser(msg.message.user.name, msg.match[2])
+    result = teamManager.addUserToTeam(user, teamName)
+    msg.send responseMessage.addUserToTeam(teamName, user, result)
 
   ##
   ## hubot <team_name> team +1 - add me to the team
   ##
   robot.respond /(\S*)? team \+1 ?.*/i, (msg) ->
-    team_name = msg.match[1]
-    addUserToTeam(msg.message.user.name, team_name, msg)
+    teamName = msg.match[1]
+    user = responseMessage.normalizeUser(msg.message.user.name)
+    result = teamManager.addUserToTeam(user, teamName)
+    msg.send responseMessage.addUserToTeam(teamName, user, result)
 
   ##
   ## hubot <team_name> team remove (me|<user>) - remove me or <user> from team
   ##
   robot.respond /(\S*)? team remove (\S*) ?.*/i, (msg) ->
-    team_name = msg.match[1]
-    user = msg.match[2]
-    if user.toLocaleLowerCase() == "me"
-      user = msg.message.user.name
-    removeUserFromTeam(user, team_name, msg)
+    teamName = msg.match[1]
+    user = responseMessage.normalizeUser(msg.message.user.name, msg.match[2])
+    result = teamManager.removeUserFromTeam(user, teamName)
+    msg.send responseMessage.removeUserFromTeam(teamName, user, result)
 
   ##
   ## hubot <team_name> team -1 - remove me from the team
   ##
   robot.respond /(\S*)? team -1/i, (msg) ->
-    team_name = msg.match[1]
-    removeUserFromTeam(msg.message.user.name, team_name, msg)
+    teamName = msg.match[1] or teamManager.defaultTeamName
+    user = responseMessage.normalizeUser(msg.message.user.name)
+    result = teamManager.removeUserFromTeam(user, teamName)
+    msg.send responseMessage.removeUserFromTeam(teamName, user, result)
 
   ##
   ## hubot <team_name> team count - list the current size of the team
   ##
   robot.respond /(\S*)? team count$/i, (msg) ->
-    team_name = msg.match[1] || config.default_team_label
-    return unless teamExists(team_name)
-    msg.send "#{teamSize(team_name, msg)} people are currently in the team"
+    teamName = msg.match[1] or teamManager.defaultTeamName
+    msg.send responseMessage.teamCount(teamName)
 
   ##
   ## hubot <team_name> team (list|show) - list the people in the team
   ##
   robot.respond /(\S*)? team (list|show)$/i, (msg) ->
-    team_name = msg.match[1] || config.default_team_label
-    return unless teamExists(team_name)
-    count = teamSize(team_name, msg)
-    if count == 0
-      msg.send "There is no one in the #{teamLabel(team_name)} currently"
-    else
-      position = 0
-      message = "#{teamLabel(team_name)} (#{count} total):\n"
-      for user in robot.brain.data.teams[team_name]
-        position += 1
-        message += "#{position}. #{user}\n"
-      msg.send message
+    teamName = msg.match[1] or teamManager.defaultTeamName
+    msg.send responseMessage.listUsersInTeam(teamName)
 
   ##
   ## hubot <team_name> team (empty|clear) - clear team list
   ##
   robot.respond /(\S*)? team (clear|empty)$/i, (msg) ->
-    team_name = msg.match[1] || config.default_team_label
-    if msg.message.user.name in admins
-      robot.brain.data.teams[team_name] = []
-      msg.send "#{teamLabel(team_name)} list cleared"
-    else
-      msg.reply "Sorry, only admins can clear the team members list"
+    teamName = msg.match[1] or teamManager.defaultTeamName
+    user = msg.message.user.name
+    return msg.reply(responseMessage.adminRequired()) unless user in admins
+    teamManager.teamFor(teamName).clear()
+    msg.send responseMessage.teamCleared(teamName)
+
+  ##
+  ## hubot upgrade teams - upgrade team for the new structure
+  ##
+  robot.respond /upgrade teams$/i, (msg) ->
+    teamManager.upgradeTeam()
+    msg.send responseMessage.listTeams()
