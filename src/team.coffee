@@ -22,25 +22,20 @@
 #
 # Author:
 #   mihai
-config =
-  adminList: process.env.HUBOT_TEAM_ADMIN,
 
-TeamManager = require "./team_manager"
-ResponseMessage = require "./helpers/response_message"
+Config          = require './models/config'
+TeamManager     = require './models/team_manager'
+ResponseMessage = require './helpers/response_message'
+UserNormalizer  = require './helpers/user_normalizer'
 
 module.exports = (robot) ->
-  robot.brain.data.teams or= {}
+  robot.brain.data.teams       or= {}
   robot.brain.data.playerStats or= []
-  teamManager = new TeamManager(robot)
+  teamManager     = new TeamManager(robot)
   responseMessage = new ResponseMessage(teamManager)
 
-  unless config.adminList?
-    robot.logger.warning 'The HUBOT_TEAM_ADMIN environment variable not set'
-
-  if config.adminList?
-    admins = config.adminList.split ','
-  else
-    admins = []
+  unless Config.adminList()
+    robot.logger.warning 'HUBOT_TEAM_ADMIN environment variable not set'
 
   ##
   ## hubot create <team_name> team - create team called <team_name>
@@ -57,7 +52,7 @@ module.exports = (robot) ->
   robot.respond /(delete|remove) (\S*) team ?.*/i, (msg) ->
     teamName = msg.match[2]
     name = msg.message.user.name
-    return msg.reply responseMessage.adminRequired() unless name in admins
+    return msg.reply responseMessage.adminRequired() unless name in Config.admins()
     result = teamManager.removeTeam(teamName)
     msg.send responseMessage.deleteTeam(teamName, result)
 
@@ -77,7 +72,7 @@ module.exports = (robot) ->
   ##
   robot.respond /(\S*)? team add @?(\S*) ?.*/i, (msg) ->
     teamName = msg.match[1]
-    user = responseMessage.normalizeUser(msg.message.user.name, msg.match[2])
+    user = UserNormalizer.normalize(msg.message.user.name, msg.match[2])
     result = teamManager.addUserToTeam(user, teamName)
     msg.send responseMessage.addUserToTeam(teamName, user, result)
 
@@ -86,7 +81,7 @@ module.exports = (robot) ->
   ##
   robot.respond /(\S*)? team \+1 ?.*/i, (msg) ->
     teamName = msg.match[1]
-    user = responseMessage.normalizeUser(msg.message.user.name)
+    user = UserNormalizer.normalize(msg.message.user.name)
     result = teamManager.addUserToTeam(user, teamName)
     msg.send responseMessage.addUserToTeam(teamName, user, result)
 
@@ -95,7 +90,7 @@ module.exports = (robot) ->
   ##
   robot.respond /(\S*)? team remove (\S*) ?.*/i, (msg) ->
     teamName = msg.match[1]
-    user = responseMessage.normalizeUser(msg.message.user.name, msg.match[2])
+    user = UserNormalizer.normalize(msg.message.user.name, msg.match[2])
     result = teamManager.removeUserFromTeam(user, teamName)
     msg.send responseMessage.removeUserFromTeam(teamName, user, result)
 
@@ -103,8 +98,8 @@ module.exports = (robot) ->
   ## hubot <team_name> team -1 - remove me from the team
   ##
   robot.respond /(\S*)? team -1/i, (msg) ->
-    teamName = msg.match[1] or teamManager.defaultTeamName
-    user = responseMessage.normalizeUser(msg.message.user.name)
+    teamName = msg.match[1] or Config.defaultTeamLabel
+    user = UserNormalizer.normalize(msg.message.user.name)
     result = teamManager.removeUserFromTeam(user, teamName)
     msg.send responseMessage.removeUserFromTeam(teamName, user, result)
 
@@ -112,23 +107,23 @@ module.exports = (robot) ->
   ## hubot <team_name> team count - list the current size of the team
   ##
   robot.respond /(\S*)? team count$/i, (msg) ->
-    teamName = msg.match[1] or teamManager.defaultTeamName
+    teamName = msg.match[1] or Config.defaultTeamLabel
     msg.send responseMessage.teamCount(teamName)
 
   ##
   ## hubot <team_name> team (list|show) - list the people in the team
   ##
   robot.respond /(\S*)? team (list|show)$/i, (msg) ->
-    teamName = msg.match[1] or teamManager.defaultTeamName
+    teamName = msg.match[1] or Config.defaultTeamLabel
     msg.send responseMessage.listUsersInTeam(teamName)
 
   ##
   ## hubot <team_name> team (empty|clear) - clear team list
   ##
   robot.respond /(\S*)? team (clear|empty)$/i, (msg) ->
-    teamName = msg.match[1] or teamManager.defaultTeamName
+    teamName = msg.match[1] or Config.defaultTeamLabel
     user = msg.message.user.name
-    return msg.reply(responseMessage.adminRequired()) unless user in admins
+    return msg.reply(responseMessage.adminRequired()) unless user in Config.admins()
     teamManager.teamFor(teamName).clear()
     msg.send responseMessage.teamCleared(teamName)
 

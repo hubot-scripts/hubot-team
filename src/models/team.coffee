@@ -1,17 +1,14 @@
-config =
-  adminList: process.env.HUBOT_TEAM_ADMIN,
-  defaultTeamLabel: '__default__'
+Config = require './config'
 
 class Team
-  constructor: (@name, @_players=[])->
+  constructor: (@name, @_players = [])->
 
   players: ->
-    @_players||=[]
+    @_players or= []
 
   label: ->
-    label = @name unless @name is config.defaultTeamLabel
-    message = if label then "`#{label}` team" else "team"
-    return message
+    return 'team' if @name is Config.defaultTeamLabel
+    "`#{@name}` team"
 
   clear: ->
     @_players = []
@@ -21,7 +18,5 @@ class Team
 
   size: ->
     @players().length
-
-
 
 module.exports = Team

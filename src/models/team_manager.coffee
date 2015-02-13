@@ -1,8 +1,7 @@
-Team = require("./models/team")
+Config = require './config'
+Team   = require './team'
 
 class TeamManager
-  defaultTeamName: "__default__"
-
   constructor: (robot)->
     @robot = robot
 
@@ -12,13 +11,11 @@ class TeamManager
 
   removeTeam: (name)->
     return unless @teamExists(name)
-
-    unless name is @defaultTeamName
+    if name is Config.defaultTeamLabel
+      false
+    else
       delete @teams()[name]
       true
-    else
-      false
-
 
   # change return and return boolean raise errors
   addUserToTeam: (user, teamName)->
@@ -34,7 +31,7 @@ class TeamManager
       true
 
   removeUserFromTeam: (user, teamName) ->
-    teamName = @defaultTeamName unless teamName
+    teamName = Config.defaultTeamLabel unless teamName
     return unless @teamExists(teamName)
 
     team = @findTeam teamName
@@ -46,19 +43,18 @@ class TeamManager
       @teams()[teamName] = team
       true
 
-
   teamExists: (name)->
-    return @defaultTeam() && true if name is @defaultTeamName
+    return @defaultTeam() && true if name is Config.defaultTeamLabel
     @teams()[name]
 
   defaultTeam: ->
-    @teams()[@defaultTeamName] or= new Team(@defaultTeamName)
+    @teams()[Config.defaultTeamLabel] or= new Team(Config.defaultTeamLabel)
 
   destroyDefaultTeam: ->
-    @teams()[@defaultTeamName] = null
+    @teams()[Config.defaultTeamLabel] = null
 
   hasDefaultTeam: ->
-    @teams()[@defaultTeamName]
+    if @teams()[Config.defaultTeamLabel] then true else false
 
   teams: ->
     @robot.brain.data.teams or= {}
@@ -67,7 +63,7 @@ class TeamManager
     @_teamCount ||= Object.keys(@teams()).length
 
   findTeam: (name)->
-    name = @defaultTeamName unless name
+    name = Config.defaultTeamLabel unless name
     teamData = @teams()[name]
     new Team(teamData.name, teamData._players)
 
@@ -83,6 +79,5 @@ class TeamManager
         teams[index] = team
 
     @robot.brain.data.teams = teams
-
 
 module.exports = TeamManager
