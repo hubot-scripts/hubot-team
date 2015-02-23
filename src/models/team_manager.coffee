@@ -20,7 +20,7 @@ class TeamManager
   # change return and return boolean raise errors
   addUserToTeam: (user, teamName)->
     return if teamName && !@teamExists(teamName)
-    teamName = @defaultTeam().name  unless teamName
+    teamName = @defaultTeam().name unless teamName
 
     team = @findTeam teamName
     if user in team.players()
@@ -43,9 +43,14 @@ class TeamManager
       @teams()[teamName] = team
       true
 
+  clearTeam: (name)->
+    team = @findTeam name
+    team.clear()
+    delete @teams()[team.name]
+
   teamExists: (name)->
     return @defaultTeam() && true if name is Config.defaultTeamLabel
-    @teams()[name]
+    if @teams()[name] then true else false
 
   defaultTeam: ->
     @teams()[Config.defaultTeamLabel] or= new Team(Config.defaultTeamLabel)
@@ -60,7 +65,7 @@ class TeamManager
     @robot.brain.data.teams or= {}
 
   teamsCount: ->
-    @_teamCount ||= Object.keys(@teams()).length
+    Object.keys(@teams()).length
 
   findTeam: (name)->
     name = Config.defaultTeamLabel unless name

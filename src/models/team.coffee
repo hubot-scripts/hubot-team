@@ -14,7 +14,7 @@ class Team
     @_players = []
 
   addPlayer: (player)->
-    @players().push player
+    @_players.push player
 
   size: ->
     @players().length

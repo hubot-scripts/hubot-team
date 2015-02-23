@@ -124,7 +124,7 @@ module.exports = (robot) ->
     teamName = msg.match[1] or Config.defaultTeamLabel
     user = msg.message.user.name
     return msg.reply(responseMessage.adminRequired()) unless user in Config.admins()
-    teamManager.teamFor(teamName).clear()
+    teamManager.clearTeam(teamName)
     msg.send responseMessage.teamCleared(teamName)
 
   ##
