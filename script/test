@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# bootstrap environment
+source script/bootstrap
+
+mocha --recursive --compilers coffee:coffee-script
